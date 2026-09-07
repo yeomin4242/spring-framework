@@ -42,19 +42,19 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 /**
- * Mock object based tests for TableMetaDataContext.
+ * Mock object based tests for {@link TableMetaDataContext}.
  *
  * @author Thomas Risberg
  */
 class TableMetaDataContextTests {
 
-	private DataSource dataSource = mock();
+	private final DataSource dataSource = mock();
 
-	private Connection connection = mock();
+	private final Connection connection = mock();
 
-	private DatabaseMetaData databaseMetaData = mock();
+	private final DatabaseMetaData databaseMetaData = mock();
 
-	private TableMetaDataContext context = new TableMetaDataContext();
+	private final TableMetaDataContext context = new TableMetaDataContext();
 
 
 	@BeforeEach
@@ -141,7 +141,7 @@ class TableMetaDataContextTests {
 		given(databaseMetaData.getColumns(null, USER, TABLE, null)).willReturn(columnsResultSet);
 
 		MapSqlParameterSource map = new MapSqlParameterSource();
-		String[] keyCols = new String[] { "id" };
+		String[] keyCols = { "id" };
 		context.setTableName(TABLE);
 		context.processMetaData(dataSource, new ArrayList<>(), keyCols);
 		List<Object> values = context.matchInParameterValuesWithInsertColumns(map);
@@ -155,34 +155,32 @@ class TableMetaDataContextTests {
 		verify(columnsResultSet).close();
 	}
 
-	@Test
+	@Test  // gh-37014
 	void overlappingDeclaredAndGeneratedKeyColumnsAreRejected() throws Exception {
 		initializeTwoColumnCustomersTable();
 		context.setTableName("customers");
 
 		assertThatExceptionOfType(InvalidDataAccessApiUsageException.class)
-				.isThrownBy(() -> context.processMetaData(
-						dataSource, List.of("id", "name"), new String[] { "id" }))
+				.isThrownBy(() -> context.processMetaData(dataSource, List.of("id", "name"), new String[] { "id" }))
 				.withMessage("Declared columns [id] must not overlap with generated key columns");
 	}
 
-	@Test
+	@Test  // gh-37014
 	void overlappingDeclaredAndGeneratedKeyColumnsAreRejectedRegardlessOfCase() throws Exception {
 		initializeTwoColumnCustomersTable();
 		context.setTableName("customers");
 
 		assertThatExceptionOfType(InvalidDataAccessApiUsageException.class)
-				.isThrownBy(() -> context.processMetaData(
-						dataSource, List.of("ID", "name"), new String[] { "id" }))
+				.isThrownBy(() -> context.processMetaData(dataSource, List.of("ID", "name"), new String[] { "id" }))
 				.withMessage("Declared columns [ID] must not overlap with generated key columns");
 	}
 
-	@Test
+	@Test  // gh-37014
 	void declaredColumnsWithoutOverlapAreUsedAsIs() throws Exception {
 		initializeTwoColumnCustomersTable();
 		MapSqlParameterSource map = new MapSqlParameterSource();
 		map.addValue("name", "Sven");
-		String[] keyCols = new String[] { "id" };
+		String[] keyCols = { "id" };
 		context.setTableName("customers");
 		context.processMetaData(dataSource, List.of("name"), keyCols);
 		List<Object> values = context.matchInParameterValuesWithInsertColumns(map);
@@ -191,6 +189,7 @@ class TableMetaDataContextTests {
 		assertThat(insertString).isEqualTo("INSERT INTO customers (name) VALUES(?)");
 		assertThat(values).containsExactly("Sven");
 	}
+
 
 	private void initializeTwoColumnCustomersTable() throws Exception {
 		ResultSet metaDataResultSet = mock();
