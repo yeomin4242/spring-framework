@@ -20,9 +20,8 @@ import java.time.Duration;
 
 import org.jspecify.annotations.Nullable;
 
-import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
-import org.springframework.util.StringUtils;
+import org.springframework.web.util.SseUtils;
 
 /**
  * Representation for a Server-Sent Event for use with Spring's reactive Web support.
@@ -97,7 +96,7 @@ public final class ServerSentEvent<T> {
 
 	/**
 	 * Return a StringBuilder with the id, event, retry, and comment fields fully
-	 * serialized, and also appending "data:" if there is data.
+	 * serialized, and also appending "data: " if there is data.
 	 * @since 6.2.1
 	 */
 	public String format() {
@@ -112,10 +111,12 @@ public final class ServerSentEvent<T> {
 			appendAttribute("retry", this.retry.toMillis(), sb);
 		}
 		if (this.comment != null) {
-			sb.append(':').append(StringUtils.replace(this.comment, "\n", "\n:")).append('\n');
+			sb.append(':');
+			SseUtils.appendFieldValue("", this.comment, sb);
+			sb.append('\n');
 		}
 		if (this.data != null) {
-			sb.append("data:");
+			sb.append("data: ");
 		}
 		return sb.toString();
 	}
@@ -240,21 +241,16 @@ public final class ServerSentEvent<T> {
 
 		@Override
 		public Builder<T> id(String id) {
-			checkEvent(id);
+			SseUtils.assertNoLineSeparator(id);
 			this.id = id;
 			return this;
 		}
 
 		@Override
 		public Builder<T> event(String event) {
-			checkEvent(event);
+			SseUtils.assertNoLineSeparator(event);
 			this.event = event;
 			return this;
-		}
-
-		private static void checkEvent(String content) {
-			Assert.isTrue(content.indexOf('\n') == -1 && content.indexOf('\r') == -1,
-					"illegal character '\\n' or '\\r' in event content");
 		}
 
 		@Override

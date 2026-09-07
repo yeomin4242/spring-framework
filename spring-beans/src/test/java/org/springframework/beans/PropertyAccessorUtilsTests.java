@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Juergen Hoeller
  * @author Chris Beams
+ * @author Sam Brannen
  */
 class PropertyAccessorUtilsTests {
 
@@ -49,12 +50,24 @@ class PropertyAccessorUtilsTests {
 	void getFirstNestedPropertySeparatorIndex() {
 		assertThat(PropertyAccessorUtils.getFirstNestedPropertySeparatorIndex("[user]")).isEqualTo(-1);
 		assertThat(PropertyAccessorUtils.getFirstNestedPropertySeparatorIndex("user.name")).isEqualTo(4);
+		assertThat(PropertyAccessorUtils.getFirstNestedPropertySeparatorIndex("map[key[0]].name")).isEqualTo(11);
+
+		// A dot nested two (unclosed) bracket levels deep must not be mistaken
+		// for a top-level separator, even though the net number of brackets
+		// seen so far is even.
+		assertThat(PropertyAccessorUtils.getFirstNestedPropertySeparatorIndex("a[b[c.d]]")).isEqualTo(-1);
 	}
 
 	@Test
 	void getLastNestedPropertySeparatorIndex() {
 		assertThat(PropertyAccessorUtils.getLastNestedPropertySeparatorIndex("[user]")).isEqualTo(-1);
 		assertThat(PropertyAccessorUtils.getLastNestedPropertySeparatorIndex("user.address.street")).isEqualTo(12);
+		assertThat(PropertyAccessorUtils.getLastNestedPropertySeparatorIndex("map[key[0]].name")).isEqualTo(11);
+
+		// Symmetric case to the one above, but scanning from the end: a dot
+		// preceded (from the right) by two unmatched closing brackets must
+		// not be mistaken for a top-level separator.
+		assertThat(PropertyAccessorUtils.getLastNestedPropertySeparatorIndex("d.c]b]a")).isEqualTo(-1);
 	}
 
 	@Test
@@ -83,6 +96,39 @@ class PropertyAccessorUtilsTests {
 		assertThat(PropertyAccessorUtils.canonicalPropertyName("map[\"key1]")).isEqualTo("map[\"key1]");
 		assertThat(PropertyAccessorUtils.canonicalPropertyName("map[']")).isEqualTo("map[']");
 		assertThat(PropertyAccessorUtils.canonicalPropertyName("map[\"]")).isEqualTo("map[\"]");
+
+		// Keys that themselves contain bracket characters must be resolved
+		// using depth-aware parsing, consistent with how the property
+		// accessor resolves the same paths during actual data binding.
+		assertThat(PropertyAccessorUtils.canonicalPropertyName("map[\"key[0]\"]")).isEqualTo("map[key[0]]");
+		assertThat(PropertyAccessorUtils.canonicalPropertyName("map['key[0]'].name")).isEqualTo("map[key[0]].name");
+		assertThat(PropertyAccessorUtils.canonicalPropertyName("users['admin[0]']")).isEqualTo("users[admin[0]]");
+	}
+
+	@Test  // gh-36999
+	void hasUnbalancedBrackets() {
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("property")).isFalse();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("array[]")).isFalse();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("array[0]")).isFalse();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map[key1]")).isFalse();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map[key1][key2]")).isFalse();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map[key1].name")).isFalse();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map['key[0]'].name")).isFalse();
+
+		// A lone '[' or ']' anywhere in the path is unbalanced.
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map.[.name")).isTrue();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map.].name")).isTrue();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map.[X.name")).isTrue();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map.X[.name")).isTrue();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("[map")).isTrue();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map]")).isTrue();
+
+		// Multiple stray brackets are unbalanced.
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map.[[.name")).isTrue();
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map.]].name")).isTrue();
+
+		// A ']' before any preceding '[' is unbalanced even if a '[' follows later.
+		assertThat(PropertyAccessorUtils.hasUnbalancedBrackets("map.][.name")).isTrue();
 	}
 
 	@Test

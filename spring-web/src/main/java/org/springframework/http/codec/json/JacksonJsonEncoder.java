@@ -117,14 +117,14 @@ public class JacksonJsonEncoder extends AbstractJacksonEncoder<JsonMapper> {
 
 	private static PrettyPrinter initSsePrettyPrinter() {
 		DefaultPrettyPrinter printer = new DefaultPrettyPrinter();
-		printer.indentObjectsWith(new DefaultIndenter("  ", "\ndata:"));
+		printer.indentObjectsWith(new DefaultIndenter("  ", "\ndata: "));
 		return printer;
 	}
 
 
 	@Override
 	public boolean canEncode(ResolvableType elementType, @Nullable MimeType mimeType) {
-		return super.canEncode(elementType, mimeType) && !String.class.isAssignableFrom(elementType.toClass());
+		return (super.canEncode(elementType, mimeType) && String.class != elementType.toClass());
 	}
 
 	@Override

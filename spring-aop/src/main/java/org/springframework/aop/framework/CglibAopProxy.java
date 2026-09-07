@@ -292,8 +292,13 @@ class CglibAopProxy implements AopProxy, Serializable {
 					if (Modifier.isFinal(mod)) {
 						if (logger.isWarnEnabled() && Modifier.isPublic(mod)) {
 							if (implementsInterface(method, ifcs)) {
-								logger.warn("Unable to proxy interface-implementing method [" + method + "] because " +
-										"it is marked as final, consider using interface-based JDK proxies instead.");
+								// Final methods inherited from configuration callback interfaces are
+								// typically driven by the container itself rather than by user code, so
+								// logging a warning about CGLIB being unable to advise them is misleading noise.
+								if (!implementsOnlyConfigurationCallbackInterfaces(method, ifcs)) {
+									logger.warn("Unable to proxy interface-implementing method [" + method + "] because " +
+											"it is marked as final, consider using interface-based JDK proxies instead.");
+								}
 							}
 							else {
 								logger.warn("Public final method [" + method + "] cannot get proxied via CGLIB, " +
@@ -413,6 +418,25 @@ class CglibAopProxy implements AopProxy, Serializable {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Check whether every interface that declares the given method is a
+	 * configuration callback interface.
+	 * @since 7.1
+	 * @see AopProxyUtils#isConfigurationCallbackInterface(Class)
+	 */
+	static boolean implementsOnlyConfigurationCallbackInterfaces(Method method, Set<Class<?>> ifcs) {
+		boolean matched = false;
+		for (Class<?> ifc : ifcs) {
+			if (ClassUtils.hasMethod(ifc, method)) {
+				if (!AopProxyUtils.isConfigurationCallbackInterface(ifc)) {
+					return false;
+				}
+				matched = true;
+			}
+		}
+		return matched;
 	}
 
 	/**

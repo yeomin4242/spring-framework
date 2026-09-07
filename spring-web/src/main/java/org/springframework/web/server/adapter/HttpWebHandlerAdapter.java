@@ -86,8 +86,7 @@ public class HttpWebHandlerAdapter extends WebHandlerDecorator implements HttpHa
 
 	private WebSessionManager sessionManager = new DefaultWebSessionManager();
 
-	@SuppressWarnings("NullAway.Init")
-	private ServerCodecConfigurer codecConfigurer;
+	private @Nullable ServerCodecConfigurer codecConfigurer;
 
 	private LocaleContextResolver localeContextResolver = new AcceptHeaderLocaleContextResolver();
 
@@ -153,10 +152,12 @@ public class HttpWebHandlerAdapter extends WebHandlerDecorator implements HttpHa
 	 * Return the configured {@link ServerCodecConfigurer}.
 	 */
 	public ServerCodecConfigurer getCodecConfigurer() {
-		if (this.codecConfigurer == null) {
-			setCodecConfigurer(ServerCodecConfigurer.create());
+		ServerCodecConfigurer codecConfigurer = this.codecConfigurer;
+		if (codecConfigurer == null) {
+			codecConfigurer = ServerCodecConfigurer.create();
+			setCodecConfigurer(codecConfigurer);
 		}
-		return this.codecConfigurer;
+		return codecConfigurer;
 	}
 
 	/**
@@ -362,15 +363,14 @@ public class HttpWebHandlerAdapter extends WebHandlerDecorator implements HttpHa
 		ServerHttpResponse response = exchange.getResponse();
 		String logPrefix = exchange.getLogPrefix();
 
-		// Sometimes a remote call error can look like a disconnected client.
-		// Try to set the response first before the "isDisconnectedClient" check.
-
-		if (response.setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR)) {
-			logger.error(logPrefix + "500 Server Error for " + formatRequest(request), ex);
+		if (disconnectedClientHelper.checkAndLogClientDisconnectedException(ex)) {
+			// Attempt to send 500 in case of onward (rather than client) connection issue
+			response.setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
+			observationContext.setConnectionAborted(true);
 			return Mono.empty();
 		}
-		else if (disconnectedClientHelper.checkAndLogClientDisconnectedException(ex)) {
-			observationContext.setConnectionAborted(true);
+		else if (response.setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR)) {
+			logger.error(logPrefix + "500 Server Error for " + formatRequest(request), ex);
 			return Mono.empty();
 		}
 		else {

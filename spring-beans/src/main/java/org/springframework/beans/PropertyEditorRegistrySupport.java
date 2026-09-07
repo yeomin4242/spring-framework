@@ -79,18 +79,30 @@ import org.springframework.util.ClassUtils;
 
 /**
  * Base implementation of the {@link PropertyEditorRegistry} interface.
- * Provides management of default editors and custom editors.
- * Mainly serves as base class for {@link BeanWrapperImpl}.
+ *
+ * <p>Provides management of default editors and custom editors.
+ *
+ * <p>Mainly serves as base class for {@link BeanWrapperImpl}.
  *
  * @author Juergen Hoeller
  * @author Rob Harrop
  * @author Sebastien Deleuze
+ * @author Sam Brannen
  * @since 1.2.6
  * @see java.beans.PropertyEditorManager
  * @see java.beans.PropertyEditorSupport#setAsText
  * @see java.beans.PropertyEditorSupport#setValue
  */
 public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
+
+	/**
+	 * The maximum number of {@code [key]} segments that {@link #addStrippedPropertyPaths}
+	 * will process in a single property path, to avoid excessive recursion and the
+	 * resulting exponential blowup in the number of generated stripped paths for
+	 * property paths with a large number of {@code [key]} segments.
+	 * @since 7.1
+	 */
+	private static final int MAX_STRIPPED_PROPERTY_PATH_DEPTH = 8;
 
 	private @Nullable ConversionService conversionService;
 
@@ -100,8 +112,7 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
 
 	private @Nullable PropertyEditorRegistrar defaultEditorRegistrar;
 
-	@SuppressWarnings("NullAway.Init")
-	private Map<Class<?>, PropertyEditor> defaultEditors;
+	private @Nullable Map<Class<?>, PropertyEditor> defaultEditors;
 
 	private @Nullable Map<Class<?>, PropertyEditor> overriddenDefaultEditors;
 
@@ -201,7 +212,7 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
 			}
 		}
 		if (this.defaultEditors == null) {
-			createDefaultEditors();
+			this.defaultEditors = createDefaultEditors();
 		}
 		return this.defaultEditors.get(requiredType);
 	}
@@ -209,75 +220,77 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
 	/**
 	 * Actually register the default editors for this registry instance.
 	 */
-	private void createDefaultEditors() {
-		this.defaultEditors = new HashMap<>(64);
+	private Map<Class<?>, PropertyEditor> createDefaultEditors() {
+		Map<Class<?>, PropertyEditor> defaultEditors = new HashMap<>(64);
 
 		// Simple editors, without parameterization capabilities.
 		// The JDK does not contain a default editor for any of these target types.
-		this.defaultEditors.put(Charset.class, new CharsetEditor());
-		this.defaultEditors.put(Class.class, new ClassEditor());
-		this.defaultEditors.put(Class[].class, new ClassArrayEditor());
-		this.defaultEditors.put(Currency.class, new CurrencyEditor());
-		this.defaultEditors.put(File.class, new FileEditor());
-		this.defaultEditors.put(InputStream.class, new InputStreamEditor());
-		this.defaultEditors.put(InputSource.class, new InputSourceEditor());
-		this.defaultEditors.put(Locale.class, new LocaleEditor());
-		this.defaultEditors.put(Path.class, new PathEditor());
-		this.defaultEditors.put(Pattern.class, new PatternEditor());
-		this.defaultEditors.put(Properties.class, new PropertiesEditor());
-		this.defaultEditors.put(Reader.class, new ReaderEditor());
-		this.defaultEditors.put(Resource[].class, new ResourceArrayPropertyEditor());
-		this.defaultEditors.put(TimeZone.class, new TimeZoneEditor());
-		this.defaultEditors.put(URI.class, new URIEditor());
-		this.defaultEditors.put(URL.class, new URLEditor());
-		this.defaultEditors.put(UUID.class, new UUIDEditor());
-		this.defaultEditors.put(ZoneId.class, new ZoneIdEditor());
+		defaultEditors.put(Charset.class, new CharsetEditor());
+		defaultEditors.put(Class.class, new ClassEditor());
+		defaultEditors.put(Class[].class, new ClassArrayEditor());
+		defaultEditors.put(Currency.class, new CurrencyEditor());
+		defaultEditors.put(File.class, new FileEditor());
+		defaultEditors.put(InputStream.class, new InputStreamEditor());
+		defaultEditors.put(InputSource.class, new InputSourceEditor());
+		defaultEditors.put(Locale.class, new LocaleEditor());
+		defaultEditors.put(Path.class, new PathEditor());
+		defaultEditors.put(Pattern.class, new PatternEditor());
+		defaultEditors.put(Properties.class, new PropertiesEditor());
+		defaultEditors.put(Reader.class, new ReaderEditor());
+		defaultEditors.put(Resource[].class, new ResourceArrayPropertyEditor());
+		defaultEditors.put(TimeZone.class, new TimeZoneEditor());
+		defaultEditors.put(URI.class, new URIEditor());
+		defaultEditors.put(URL.class, new URLEditor());
+		defaultEditors.put(UUID.class, new UUIDEditor());
+		defaultEditors.put(ZoneId.class, new ZoneIdEditor());
 
 		// Default instances of collection editors.
 		// Can be overridden by registering custom instances of those as custom editors.
-		this.defaultEditors.put(Collection.class, new CustomCollectionEditor(Collection.class));
-		this.defaultEditors.put(Set.class, new CustomCollectionEditor(Set.class));
-		this.defaultEditors.put(SortedSet.class, new CustomCollectionEditor(SortedSet.class));
-		this.defaultEditors.put(List.class, new CustomCollectionEditor(List.class));
-		this.defaultEditors.put(SortedMap.class, new CustomMapEditor(SortedMap.class));
+		defaultEditors.put(Collection.class, new CustomCollectionEditor(Collection.class));
+		defaultEditors.put(Set.class, new CustomCollectionEditor(Set.class));
+		defaultEditors.put(SortedSet.class, new CustomCollectionEditor(SortedSet.class));
+		defaultEditors.put(List.class, new CustomCollectionEditor(List.class));
+		defaultEditors.put(SortedMap.class, new CustomMapEditor(SortedMap.class));
 
 		// Default editors for primitive arrays.
-		this.defaultEditors.put(byte[].class, new ByteArrayPropertyEditor());
-		this.defaultEditors.put(char[].class, new CharArrayPropertyEditor());
+		defaultEditors.put(byte[].class, new ByteArrayPropertyEditor());
+		defaultEditors.put(char[].class, new CharArrayPropertyEditor());
 
 		// The JDK does not contain a default editor for char!
-		this.defaultEditors.put(char.class, new CharacterEditor(false));
-		this.defaultEditors.put(Character.class, new CharacterEditor(true));
+		defaultEditors.put(char.class, new CharacterEditor(false));
+		defaultEditors.put(Character.class, new CharacterEditor(true));
 
 		// Spring's CustomBooleanEditor accepts more flag values than the JDK's default editor.
-		this.defaultEditors.put(boolean.class, new CustomBooleanEditor(false));
-		this.defaultEditors.put(Boolean.class, new CustomBooleanEditor(true));
+		defaultEditors.put(boolean.class, new CustomBooleanEditor(false));
+		defaultEditors.put(Boolean.class, new CustomBooleanEditor(true));
 
 		// The JDK does not contain default editors for number wrapper types!
 		// Override JDK primitive number editors with our own CustomNumberEditor.
-		this.defaultEditors.put(byte.class, new CustomNumberEditor(Byte.class, false));
-		this.defaultEditors.put(Byte.class, new CustomNumberEditor(Byte.class, true));
-		this.defaultEditors.put(short.class, new CustomNumberEditor(Short.class, false));
-		this.defaultEditors.put(Short.class, new CustomNumberEditor(Short.class, true));
-		this.defaultEditors.put(int.class, new CustomNumberEditor(Integer.class, false));
-		this.defaultEditors.put(Integer.class, new CustomNumberEditor(Integer.class, true));
-		this.defaultEditors.put(long.class, new CustomNumberEditor(Long.class, false));
-		this.defaultEditors.put(Long.class, new CustomNumberEditor(Long.class, true));
-		this.defaultEditors.put(float.class, new CustomNumberEditor(Float.class, false));
-		this.defaultEditors.put(Float.class, new CustomNumberEditor(Float.class, true));
-		this.defaultEditors.put(double.class, new CustomNumberEditor(Double.class, false));
-		this.defaultEditors.put(Double.class, new CustomNumberEditor(Double.class, true));
-		this.defaultEditors.put(BigDecimal.class, new CustomNumberEditor(BigDecimal.class, true));
-		this.defaultEditors.put(BigInteger.class, new CustomNumberEditor(BigInteger.class, true));
+		defaultEditors.put(byte.class, new CustomNumberEditor(Byte.class, false));
+		defaultEditors.put(Byte.class, new CustomNumberEditor(Byte.class, true));
+		defaultEditors.put(short.class, new CustomNumberEditor(Short.class, false));
+		defaultEditors.put(Short.class, new CustomNumberEditor(Short.class, true));
+		defaultEditors.put(int.class, new CustomNumberEditor(Integer.class, false));
+		defaultEditors.put(Integer.class, new CustomNumberEditor(Integer.class, true));
+		defaultEditors.put(long.class, new CustomNumberEditor(Long.class, false));
+		defaultEditors.put(Long.class, new CustomNumberEditor(Long.class, true));
+		defaultEditors.put(float.class, new CustomNumberEditor(Float.class, false));
+		defaultEditors.put(Float.class, new CustomNumberEditor(Float.class, true));
+		defaultEditors.put(double.class, new CustomNumberEditor(Double.class, false));
+		defaultEditors.put(Double.class, new CustomNumberEditor(Double.class, true));
+		defaultEditors.put(BigDecimal.class, new CustomNumberEditor(BigDecimal.class, true));
+		defaultEditors.put(BigInteger.class, new CustomNumberEditor(BigInteger.class, true));
 
 		// Only register config value editors if explicitly requested.
 		if (this.configValueEditorsActive) {
 			StringArrayPropertyEditor sae = new StringArrayPropertyEditor();
-			this.defaultEditors.put(String[].class, sae);
-			this.defaultEditors.put(short[].class, sae);
-			this.defaultEditors.put(int[].class, sae);
-			this.defaultEditors.put(long[].class, sae);
+			defaultEditors.put(String[].class, sae);
+			defaultEditors.put(short[].class, sae);
+			defaultEditors.put(int[].class, sae);
+			defaultEditors.put(long[].class, sae);
 		}
+
+		return defaultEditors;
 	}
 
 	/**
@@ -499,12 +512,23 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
 
 	/**
 	 * Add property paths with all variations of stripped keys and/or indexes.
-	 * Invokes itself recursively with nested paths.
+	 * <p>Invokes itself recursively with nested paths, bounded to a nesting depth
+	 * of {@link #MAX_STRIPPED_PROPERTY_PATH_DEPTH}.
 	 * @param strippedPaths the result list to add to
 	 * @param nestedPath the current nested path
 	 * @param propertyPath the property path to check for keys/indexes to strip
 	 */
 	private void addStrippedPropertyPaths(List<String> strippedPaths, String nestedPath, String propertyPath) {
+		addStrippedPropertyPaths(strippedPaths, nestedPath, propertyPath, 0);
+	}
+
+	private void addStrippedPropertyPaths(
+			List<String> strippedPaths, String nestedPath, String propertyPath, int depth) {
+
+		if (depth >= MAX_STRIPPED_PROPERTY_PATH_DEPTH) {
+			// Avoid excessive recursion.
+			return;
+		}
 		int startIndex = propertyPath.indexOf(PropertyAccessor.PROPERTY_KEY_PREFIX_CHAR);
 		if (startIndex != -1) {
 			int endIndex = propertyPath.indexOf(PropertyAccessor.PROPERTY_KEY_SUFFIX_CHAR);
@@ -515,9 +539,9 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
 				// Strip the first key.
 				strippedPaths.add(nestedPath + prefix + suffix);
 				// Search for further keys to strip, with the first key stripped.
-				addStrippedPropertyPaths(strippedPaths, nestedPath + prefix, suffix);
+				addStrippedPropertyPaths(strippedPaths, nestedPath + prefix, suffix, depth + 1);
 				// Search for further keys to strip, with the first key not stripped.
-				addStrippedPropertyPaths(strippedPaths, nestedPath + prefix + key, suffix);
+				addStrippedPropertyPaths(strippedPaths, nestedPath + prefix + key, suffix, depth + 1);
 			}
 		}
 	}

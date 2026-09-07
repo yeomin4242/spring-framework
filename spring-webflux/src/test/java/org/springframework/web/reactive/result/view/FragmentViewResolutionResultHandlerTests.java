@@ -107,14 +107,29 @@ class FragmentViewResolutionResultHandlerTests {
 				on(Handler.class).resolveReturnType(Flux.class, Fragment.class),
 				"""
 				event:fragment1
-				data:<p>
-				data:	Hello Foo
-				data:</p>
+				data: <p>
+				data: 	Hello Foo
+				data: </p>
 
 				event:fragment2
-				data:<p>
-				data:	Hello Bar
-				data:</p>
+				data: <p>
+				data: 	Hello Bar
+				data: </p>
+
+				""");
+	}
+
+	@Test
+	void escapeViewFragment() {
+		Fragment fragment = Fragment.create("fragment1", Map.of("foo", "Foo\n and Bar"));
+		testSse(Flux.just(fragment),
+				on(Handler.class).resolveReturnType(Flux.class, Fragment.class),
+				"""
+				event:fragment1
+				data: <p>
+				data: 	Hello Foo
+				data:  and Bar
+				data: </p>
 
 				""");
 	}
@@ -132,15 +147,15 @@ class FragmentViewResolutionResultHandlerTests {
 				"""
 				id:id1
 				event:event1
-				data:<p>
-				data:	Hello Foo
-				data:</p>
+				data: <p>
+				data: 	Hello Foo
+				data: </p>
 
 				id:id2
 				event:event2
-				data:<p>
-				data:	Hello Bar
-				data:</p>
+				data: <p>
+				data: 	Hello Bar
+				data: </p>
 
 				""");
 	}

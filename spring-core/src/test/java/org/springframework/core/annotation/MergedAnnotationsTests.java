@@ -1566,6 +1566,22 @@ class MergedAnnotationsTests {
 	}
 
 	/**
+	 * A meta-annotation that declares an attribute should not be synthesized
+	 * merely because it is meta-present rather than directly present, as long
+	 * as none of its attributes are mirrored or overridden anywhere in the
+	 * annotation hierarchy.
+	 */
+	@Test
+	void synthesizeShouldNotSynthesizeMetaAnnotationsWithNonOverriddenAttributes() {
+		MergedAnnotations mergedAnnotations = MergedAnnotations.from(ComponentWithPlainAttributeMetaAnnotation.class);
+
+		PlainAttributeMetaAnnotation plainAttributeMetaAnnotation =
+				mergedAnnotations.get(PlainAttributeMetaAnnotation.class).synthesize();
+		assertThat(plainAttributeMetaAnnotation.value()).isEqualTo("enigma");
+		assertNotSynthesized(plainAttributeMetaAnnotation);
+	}
+
+	/**
 	 * If an attempt is made to synthesize an annotation from an annotation instance
 	 * that has already been synthesized, the original synthesized annotation should
 	 * ideally be returned as-is without creating a new proxy instance with the same
@@ -2069,6 +2085,30 @@ class MergedAnnotationsTests {
 				.get(ValueAttribute.class).synthesize();
 		assertThat(valueAttribute).asString()
 				.isEqualTo("@%s({\"FromValueAttributeMeta\"})", ValueAttribute.class.getCanonicalName());
+	}
+
+	@Test  // gh-37244
+	void toStringForSynthesizedAnnotationsWithNonFiniteFloatingPointValues() {
+		Map<String, Object> attributes = Map.of(
+				"name", "test",
+				"floatValue", Float.NaN,
+				"doubleValue", Double.NaN);
+		RequestMapping mapping = MergedAnnotation.of(RequestMapping.class, attributes).synthesize();
+		assertThat(mapping).asString().contains("floatValue=0.0f/0.0f", "doubleValue=0.0/0.0");
+
+		attributes = Map.of(
+				"name", "test",
+				"floatValue", Float.POSITIVE_INFINITY,
+				"doubleValue", Double.POSITIVE_INFINITY);
+		mapping = MergedAnnotation.of(RequestMapping.class, attributes).synthesize();
+		assertThat(mapping).asString().contains("floatValue=1.0f/0.0f", "doubleValue=1.0/0.0");
+
+		attributes = Map.of(
+				"name", "test",
+				"floatValue", Float.NEGATIVE_INFINITY,
+				"doubleValue", Double.NEGATIVE_INFINITY);
+		mapping = MergedAnnotation.of(RequestMapping.class, attributes).synthesize();
+		assertThat(mapping).asString().contains("floatValue=-1.0f/0.0f", "doubleValue=-1.0/0.0");
 	}
 
 	@Test
@@ -2805,7 +2845,7 @@ class MergedAnnotationsTests {
 		void doIt();
 	}
 
-	class TransactionalServiceImpl implements TransactionalService {
+	static class TransactionalServiceImpl implements TransactionalService {
 
 		@Override
 		public void doIt() {
@@ -3278,6 +3318,24 @@ class MergedAnnotationsTests {
 	static class SecurityConfig {
 	}
 
+	/**
+	 * Meta-annotation that declares an attribute which is never mirrored or
+	 * overridden anywhere in the annotation hierarchy.
+	 */
+	@Retention(RUNTIME)
+	@interface PlainAttributeMetaAnnotation {
+		String value() default "enigma";
+	}
+
+	@PlainAttributeMetaAnnotation
+	@Retention(RUNTIME)
+	@interface ComposedPlainAttributeAnnotation {
+	}
+
+	@ComposedPlainAttributeAnnotation
+	static class ComponentWithPlainAttributeMetaAnnotation {
+	}
+
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target({ ElementType.FIELD, ElementType.ANNOTATION_TYPE })
 	@interface RootAnnotation {
@@ -3300,8 +3358,7 @@ class MergedAnnotationsTests {
 	@interface DoublyComposedRootAnnotation {
 	}
 
-	class DomainType {
-
+	static class DomainType {
 		@RootAnnotation
 		Object directlyAnnotated;
 

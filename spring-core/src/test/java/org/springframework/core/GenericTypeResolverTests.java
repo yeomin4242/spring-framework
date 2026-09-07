@@ -251,13 +251,19 @@ class GenericTypeResolverTests {
 		assertThat(resolvedType).isEqualTo(InheritsDefaultMethod.ConcreteType.class);
 	}
 
-	@Test
+	@Test  // gh-36480
 	void resolveTypeFromNestedParameterizedType() {
 		Type resolvedType = resolveType(method(MyInterfaceType.class, "get").getGenericReturnType(), MyCollectionInterfaceType.class);
 		assertThat(resolvedType).isEqualTo(method(MyCollectionInterfaceType.class, "get").getGenericReturnType());
 
 		resolvedType = resolveType(method(MyInterfaceType.class, "get").getGenericReturnType(), MyOptionalInterfaceType.class);
 		assertThat(resolvedType).isEqualTo(method(MyOptionalInterfaceType.class, "get").getGenericReturnType());
+	}
+
+	@Test  // gh-36890
+	void resolveTypeAgainstSameNamedVariables() {
+		Type resolvedType = resolveType(method(Create.class, "create", Object.class).getGenericParameterTypes()[0], Controller.class);
+		assertThat(resolvedType).isEqualTo(Long.class);
 	}
 
 	private static Method method(Class<?> target, String methodName, Class<?>... parameterTypes) {
@@ -273,39 +279,39 @@ class GenericTypeResolverTests {
 		}
 	}
 
-	public class MySimpleInterfaceType implements MyInterfaceType<String> {
+	public static class MySimpleInterfaceType implements MyInterfaceType<String> {
 	}
 
-	public class MyParameterizedInterfaceType<P> implements MyInterfaceType<Collection<P>> {
+	public static class MyParameterizedInterfaceType<P> implements MyInterfaceType<Collection<P>> {
 	}
 
-	public class MyOptionalInterfaceType extends MyParameterizedInterfaceType<Optional<String>> {
+	public static class MyOptionalInterfaceType extends MyParameterizedInterfaceType<Optional<String>> {
 		@Override
 		public Collection<Optional<String>> get() {
 			return super.get();
 		}
 	}
 
-	public class MyCollectionInterfaceType implements MyInterfaceType<Collection<String>> {
+	public static class MyCollectionInterfaceType implements MyInterfaceType<Collection<String>> {
 		@Override
 		public Collection<String> get() {
 			return MyInterfaceType.super.get();
 		}
 	}
 
-	public abstract class MyAbstractType<T> implements MyInterfaceType<T> {
+	public abstract static class MyAbstractType<T> implements MyInterfaceType<T> {
 	}
 
-	public class MyConcreteType extends MyAbstractType<Character> {
+	public static class MyConcreteType extends MyAbstractType<Character> {
 	}
 
-	public abstract class MySuperclassType<T> {
+	public abstract static class MySuperclassType<T> {
 	}
 
-	public class MySimpleSuperclassType extends MySuperclassType<String> {
+	public static class MySimpleSuperclassType extends MySuperclassType<String> {
 	}
 
-	public class MyCollectionSuperclassType extends MySuperclassType<Collection<String>> {
+	public static class MyCollectionSuperclassType extends MySuperclassType<Collection<String>> {
 	}
 
 	public static class MyTypeWithMethods<T> {
@@ -407,19 +413,19 @@ class GenericTypeResolverTests {
 	static class GenericClass<T> {
 	}
 
-	class A {}
+	static class A {}
 
-	class B<T> {}
+	static class B<T> {}
 
-	class C extends A {}
+	static class C extends A {}
 
-	class D extends B<Long> {}
+	static class D extends B<Long> {}
 
-	class E extends C {}
+	static class E extends C {}
 
-	class TestIfc<T> {}
+	static class TestIfc<T> {}
 
-	class TestImpl<I extends A, T extends B<I>> extends TestIfc<T> {
+	static class TestImpl<I extends A, T extends B<I>> extends TestIfc<T> {
 	}
 
 	abstract static class BiGenericClass<T extends B<?>, V extends A> {}
@@ -502,6 +508,18 @@ class GenericTypeResolverTests {
 
 		static class ConcreteType implements InterfaceWithDefaultMethod.AbstractType {
 		}
+	}
+
+	interface Search<I, O> {
+	}
+
+	interface Create<I, O> {
+		default O create(I body) {
+			return null;
+		}
+	}
+
+	static class Controller implements Search<String, Long>, Create<Long, Long> {
 	}
 
 }

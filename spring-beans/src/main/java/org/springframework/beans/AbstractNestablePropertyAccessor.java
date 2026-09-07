@@ -76,8 +76,6 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 	 */
 	private static final Log logger = LogFactory.getLog(AbstractNestablePropertyAccessor.class);
 
-	private int autoGrowCollectionLimit = Integer.MAX_VALUE;
-
 	@Nullable Object wrappedObject;
 
 	private String nestedPath = "";
@@ -155,21 +153,6 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 		setConversionService(parent.getConversionService());
 	}
 
-
-	/**
-	 * Specify a limit for array and collection auto-growing.
-	 * <p>Default is unlimited on a plain accessor.
-	 */
-	public void setAutoGrowCollectionLimit(int autoGrowCollectionLimit) {
-		this.autoGrowCollectionLimit = autoGrowCollectionLimit;
-	}
-
-	/**
-	 * Return the limit for array and collection auto-growing.
-	 */
-	public int getAutoGrowCollectionLimit() {
-		return this.autoGrowCollectionLimit;
-	}
 
 	/**
 	 * Switch the target object, replacing the cached introspection results only
@@ -299,7 +282,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 				Object convertedValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
 						componentType, ph.nested(tokens.keys.length));
 				int length = Array.getLength(propValue);
-				if (arrayIndex >= length && arrayIndex < this.autoGrowCollectionLimit) {
+				if (arrayIndex >= length && arrayIndex < getAutoGrowCollectionLimit()) {
 					Object newArray = Array.newInstance(componentType, arrayIndex + 1);
 					System.arraycopy(propValue, 0, newArray, 0, length);
 					int lastKeyIndex = tokens.canonicalName.lastIndexOf('[');
@@ -325,7 +308,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 			Object convertedValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
 					requiredType.getResolvableType().resolve(), requiredType);
 			int size = list.size();
-			if (index >= size && index < this.autoGrowCollectionLimit) {
+			if (index >= size && index < getAutoGrowCollectionLimit()) {
 				for (int i = size; i < index; i++) {
 					try {
 						list.add(null);
@@ -689,6 +672,11 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 			else if (value instanceof List list) {
 				int index = Integer.parseInt(key);
 				growCollectionIfNecessary(list, index, indexedPropertyName.toString(), ph, i + 1);
+				if (index < 0 || index >= list.size()) {
+					throw new InvalidPropertyException(getRootClass(), this.nestedPath + propertyName,
+							"Cannot get element with index " + index + " from List of size " +
+								list.size() + ", accessed using property path '" + propertyName + "'");
+				}
 				value = list.get(index);
 			}
 			else if (value instanceof Map map) {
@@ -783,7 +771,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 			return array;
 		}
 		int length = Array.getLength(array);
-		if (index >= length && index < this.autoGrowCollectionLimit) {
+		if (index >= length && index < getAutoGrowCollectionLimit()) {
 			Class<?> componentType = array.getClass().componentType();
 			Object newArray = Array.newInstance(componentType, index + 1);
 			System.arraycopy(array, 0, newArray, 0, length);
@@ -807,7 +795,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 			return;
 		}
 		int size = collection.size();
-		if (index >= size && index < this.autoGrowCollectionLimit) {
+		if (index >= size && index < getAutoGrowCollectionLimit()) {
 			Class<?> elementType = ph.getResolvableType().getNested(nestingLevel).asCollection().resolveGeneric();
 			if (elementType != null) {
 				for (int i = collection.size(); i < index + 1; i++) {
@@ -836,6 +824,10 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 	 * @return a property accessor for the target bean
 	 */
 	protected AbstractNestablePropertyAccessor getPropertyAccessorForPropertyPath(String propertyPath) {
+		if (PropertyAccessorUtils.hasUnbalancedBrackets(propertyPath)) {
+			throw new NotReadablePropertyException(getRootClass(), this.nestedPath + propertyPath,
+					"Property path '" + propertyPath + "' contains unbalanced brackets");
+		}
 		int pos = PropertyAccessorUtils.getFirstNestedPropertySeparatorIndex(propertyPath);
 		// Handle nested properties recursively.
 		if (pos > -1) {
@@ -972,7 +964,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 			int keyStart = propertyName.indexOf(PROPERTY_KEY_PREFIX, searchIndex);
 			searchIndex = -1;
 			if (keyStart != -1) {
-				int keyEnd = getPropertyNameKeyEnd(propertyName, keyStart + PROPERTY_KEY_PREFIX.length());
+				int keyEnd = PropertyAccessorUtils.getPropertyNameKeyEnd(propertyName, keyStart + PROPERTY_KEY_PREFIX.length());
 				if (keyEnd != -1) {
 					if (actualName == null) {
 						actualName = propertyName.substring(0, keyStart);
@@ -995,32 +987,6 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 			tokens.keys = StringUtils.toStringArray(keys);
 		}
 		return tokens;
-	}
-
-	private int getPropertyNameKeyEnd(String propertyName, int startIndex) {
-		int unclosedPrefixes = 0;
-		int length = propertyName.length();
-		for (int i = startIndex; i < length; i++) {
-			switch (propertyName.charAt(i)) {
-				case PropertyAccessor.PROPERTY_KEY_PREFIX_CHAR -> {
-					// The property name contains opening prefix(es)...
-					unclosedPrefixes++;
-				}
-				case PropertyAccessor.PROPERTY_KEY_SUFFIX_CHAR -> {
-					if (unclosedPrefixes == 0) {
-						// No unclosed prefix(es) in the property name (left) ->
-						// this is the suffix we are looking for.
-						return i;
-					}
-					else {
-						// This suffix does not close the initial prefix but rather
-						// just one that occurred within the property name.
-						unclosedPrefixes--;
-					}
-				}
-			}
-		}
-		return -1;
 	}
 
 	@Override
