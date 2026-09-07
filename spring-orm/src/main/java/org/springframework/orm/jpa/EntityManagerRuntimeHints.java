@@ -21,6 +21,7 @@ import java.util.Collections;
 import org.jspecify.annotations.Nullable;
 
 import org.springframework.aot.hint.ExecutableMode;
+import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.aot.hint.TypeReference;
@@ -54,6 +55,10 @@ class EntityManagerRuntimeHints implements RuntimeHintsRegistrar {
 
 	private static final String NATIVE_QUERY_IMPL_CLASS_NAME = "org.hibernate.query.sql.internal.NativeQueryImpl";
 
+	private static final String STATELESS_SESSION_CLASS_NAME = "org.hibernate.StatelessSession";
+
+	private static final String PERSISTENCE_UNIT_INFO_DESCRIPTOR_CLASS_NAME =
+			"org.hibernate.jpa.boot.internal.PersistenceUnitInfoDescriptor";
 
 	@Override
 	public void registerHints(RuntimeHints hints, @Nullable ClassLoader classLoader) {
@@ -71,32 +76,21 @@ class EntityManagerRuntimeHints implements RuntimeHintsRegistrar {
 						Collections.emptyList(), ExecutableMode.INVOKE);
 			});
 		}
+		registerJdkProxyFor(hints, classLoader, QUERY_SQM_IMPL_CLASS_NAME);
+		registerJdkProxyFor(hints, classLoader, SQM_QUERY_IMPL_CLASS_NAME);
+		registerJdkProxyFor(hints, classLoader, SELECTION_QUERY_IMPL_CLASS_NAME);
+		registerJdkProxyFor(hints, classLoader, MUTATION_QUERY_IMPL_CLASS_NAME);
+		registerJdkProxyFor(hints, classLoader, NATIVE_QUERY_IMPL_CLASS_NAME);
+		registerJdkProxyFor(hints, classLoader, STATELESS_SESSION_CLASS_NAME);
+		if (ClassUtils.isPresent(PERSISTENCE_UNIT_INFO_DESCRIPTOR_CLASS_NAME, classLoader)) {
+			hints.reflection().registerType(TypeReference.of(PERSISTENCE_UNIT_INFO_DESCRIPTOR_CLASS_NAME),
+					MemberCategory.INVOKE_PUBLIC_METHODS);
+		}
+	}
+
+	private static void registerJdkProxyFor(RuntimeHints hints, @Nullable ClassLoader classLoader, String className) {
 		try {
-			Class<?> clazz = ClassUtils.forName(QUERY_SQM_IMPL_CLASS_NAME, classLoader);
-			hints.proxies().registerJdkProxy(ClassUtils.getAllInterfacesForClass(clazz, classLoader));
-		}
-		catch (ClassNotFoundException ignored) {
-		}
-		try {
-			Class<?> clazz = ClassUtils.forName(SQM_QUERY_IMPL_CLASS_NAME, classLoader);
-			hints.proxies().registerJdkProxy(ClassUtils.getAllInterfacesForClass(clazz, classLoader));
-		}
-		catch (ClassNotFoundException ignored) {
-		}
-		try {
-			Class<?> clazz = ClassUtils.forName(SELECTION_QUERY_IMPL_CLASS_NAME, classLoader);
-			hints.proxies().registerJdkProxy(ClassUtils.getAllInterfacesForClass(clazz, classLoader));
-		}
-		catch (ClassNotFoundException ignored) {
-		}
-		try {
-			Class<?> clazz = ClassUtils.forName(MUTATION_QUERY_IMPL_CLASS_NAME, classLoader);
-			hints.proxies().registerJdkProxy(ClassUtils.getAllInterfacesForClass(clazz, classLoader));
-		}
-		catch (ClassNotFoundException ignored) {
-		}
-		try {
-			Class<?> clazz = ClassUtils.forName(NATIVE_QUERY_IMPL_CLASS_NAME, classLoader);
+			Class<?> clazz = ClassUtils.forName(className, classLoader);
 			hints.proxies().registerJdkProxy(ClassUtils.getAllInterfacesForClass(clazz, classLoader));
 		}
 		catch (ClassNotFoundException ignored) {

@@ -19,6 +19,8 @@ package org.springframework.orm.jpa;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
+import org.hibernate.StatelessSession;
+import org.hibernate.jpa.boot.internal.PersistenceUnitInfoDescriptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,12 +57,19 @@ class EntityManagerRuntimeHintsTests {
 	void entityManagerProxyHasHibernateHints() {
 		assertThat(RuntimeHintsPredicates.proxies().forInterfaces(Session.class, EntityManagerProxy.class))
 				.accepts(this.hints);
+		assertThat(RuntimeHintsPredicates.proxies().forInterfaces(StatelessSession.class)).accepts(this.hints);
 	}
 
 	@Test
 	void entityManagerFactoryHasReflectionHints() {
 		assertThat(RuntimeHintsPredicates.reflection().onMethodInvocation(EntityManagerFactory.class, "getCriteriaBuilder")).accepts(this.hints);
 		assertThat(RuntimeHintsPredicates.reflection().onMethodInvocation(EntityManagerFactory.class, "getMetamodel")).accepts(this.hints);
+	}
+
+	@Test
+	void persistenceUnitInfoDescriptorHasReflectionHints() {
+		assertThat(RuntimeHintsPredicates.reflection().onMethodInvocation(PersistenceUnitInfoDescriptor.class, "getName"))
+				.accepts(this.hints);
 	}
 
 }
