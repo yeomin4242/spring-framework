@@ -86,6 +86,7 @@ final class PartGenerator implements MultipartParser.PartListener {
 
 	@Override
 	public void onHeaders(HttpHeaders headers) {
+		// no-op on the first part, since InitialState does not override onComplete()
 		this.state.onComplete();
 		if (isFormField(headers)) {
 			this.state = new FormFieldState(headers);
